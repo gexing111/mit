@@ -2,6 +2,7 @@ package mapreduce
 
 import "container/list"
 import "fmt"
+import "log"
 
 
 type WorkerInfo struct {
@@ -28,7 +29,55 @@ func (mr *MapReduce) KillWorkers() *list.List {
 	return l
 }
 
+func input_chan(info string, c chan string) {
+	c <- info
+}
+
 func (mr *MapReduce) RunMaster() *list.List {
 	// Your code here
+
+	log.Print("gexing, run master,begin for map")
+	for i := 0; i < mr.nMap; i++ {
+		idle_worker := <- mr.registerChannel
+		log.Print("gexing dec mr.register chan from idle_work,", idle_worker)
+
+		var args DoJobArgs
+		args.File = mr.file
+		args.JobNumber = i
+		args.NumOtherPhase = mr.nReduce
+		args.Operation = Map
+
+		var reply DoJobReply
+
+		ok := call(idle_worker, "Worker.DoJob", &args, &reply)
+		if ok == false {
+			fmt.Printf("call: RPC %s idle_worker map error\n", idle_worker)
+		}
+
+		log.Print("gexing add mr.register chan from idle_work,", idle_worker)
+		go input_chan(idle_worker, mr.registerChannel)
+
+	}
+
+	log.Print("gexing, run master,begin for reduce")
+	for i := 0; i < mr.nReduce; i++ {
+		idle_worker := <- mr.registerChannel
+
+		var args DoJobArgs
+		args.File = mr.file
+		args.JobNumber = i
+		args.NumOtherPhase = mr.nMap
+		args.Operation = Reduce
+
+		var reply DoJobReply
+
+		ok := call(idle_worker, "Worker.DoJob", &args, &reply)
+		if ok == false {
+			fmt.Printf("call: RPC %s idle_worker reduce error\n", idle_worker)
+		}
+
+		go input_chan(idle_worker, mr.registerChannel)
+	}
+
 	return mr.KillWorkers()
 }
