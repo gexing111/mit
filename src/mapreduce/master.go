@@ -29,8 +29,13 @@ func (mr *MapReduce) KillWorkers() *list.List {
 	return l
 }
 
-func input_chan(info string, c chan string) {
+func inputChan(info string, c chan string) {
 	c <- info
+}
+
+func exeWorker(workerName string, rpcFunc string, args *DoJobArgs, reply *DoJobReply, mr *MapReduce){
+	call(workerName, rpcFunc, args, reply)
+	inputChan("", mr.jobCntChannel)
 }
 
 func (mr *MapReduce) RunMaster() *list.List {
@@ -49,14 +54,16 @@ func (mr *MapReduce) RunMaster() *list.List {
 
 		var reply DoJobReply
 
-		ok := call(idle_worker, "Worker.DoJob", &args, &reply)
-		if ok == false {
-			fmt.Printf("call: RPC %s idle_worker map error\n", idle_worker)
-		}
+		go exeWorker(idle_worker, "Worker.DoJob", &args, &reply, mr)
 
 		log.Print("gexing add mr.register chan from idle_work,", idle_worker)
-		go input_chan(idle_worker, mr.registerChannel)
+		go inputChan(idle_worker, mr.registerChannel)
 
+	}
+
+	//sync
+	for i := 0; i < mr.nMap; i++ {
+		<- mr.jobCntChannel
 	}
 
 	log.Print("gexing, run master,begin for reduce")
@@ -71,12 +78,14 @@ func (mr *MapReduce) RunMaster() *list.List {
 
 		var reply DoJobReply
 
-		ok := call(idle_worker, "Worker.DoJob", &args, &reply)
-		if ok == false {
-			fmt.Printf("call: RPC %s idle_worker reduce error\n", idle_worker)
-		}
+		go exeWorker(idle_worker, "Worker.DoJob", &args, &reply, mr)
 
-		go input_chan(idle_worker, mr.registerChannel)
+		go inputChan(idle_worker, mr.registerChannel)
+	}
+
+	//sync
+	for i := 0; i < mr.nReduce; i++ {
+		<- mr.jobCntChannel
 	}
 
 	return mr.KillWorkers()

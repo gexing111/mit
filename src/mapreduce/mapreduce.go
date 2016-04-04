@@ -64,6 +64,7 @@ type MapReduce struct {
 	Workers map[string]*WorkerInfo
 
 	// add any additional state here
+	jobCntChannel  chan string  //Number of job count
 }
 
 func InitMapReduce(nmap int, nreduce int,
@@ -76,6 +77,7 @@ func InitMapReduce(nmap int, nreduce int,
 	mr.alive = true
 	mr.registerChannel = make(chan string)
 	mr.DoneChannel = make(chan bool)
+	mr.jobCntChannel = make(chan string)
 
 	// initialize any additional state here
 	return mr
@@ -83,7 +85,9 @@ func InitMapReduce(nmap int, nreduce int,
 
 func MakeMapReduce(nmap int, nreduce int,
 	file string, master string) *MapReduce {
+	//1. 创建mapReduce对象
 	mr := InitMapReduce(nmap, nreduce, file, master)
+	//2.启动MASTER
 	mr.StartRegistrationServer()
 	go mr.Run()
 	return mr
